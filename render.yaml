@@ -1,0 +1,16 @@
+# Render 一键部署：Web 投喂入口
+# 在 Render Dashboard 选择 "New → Blueprint"，连接本仓库并选择此文件
+services:
+  - type: web
+    name: foodie-twin-web
+    runtime: python
+    rootDir: web
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 app:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: OPENCLAW_URL
+        sync: false
+      - key: OPENCLAW_TOKEN
+        sync: false

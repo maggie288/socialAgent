@@ -1,0 +1,14 @@
+# 本地/生产：仅 Web 投喂入口（OpenClaw 需单独部署并配置 OPENCLAW_URL / OPENCLAW_TOKEN）
+services:
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-5000}:5000"
+    environment:
+      - FLASK_ENV=production
+      - PORT=5000
+      - OPENCLAW_URL=${OPENCLAW_URL:-http://host.docker.internal:18789}
+      - OPENCLAW_TOKEN=${OPENCLAW_TOKEN}
+    restart: unless-stopped

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ i18n.meta_title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(145deg, #faf7f2 0%, #f5f0e8 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            text-align: center;
+            position: relative;
+        }
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #2c2419;
+            letter-spacing: -0.3px;
+        }
+        .header p {
+            color: #7e6b5a;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+        .lang-picker {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            font-size: 0.8rem;
+        }
+        .lang-picker select {
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #e5ddd5;
+            background: #fff;
+            color: #2c2419;
+            cursor: pointer;
+        }
+        .chat-container {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 88%;
+        }
+        .user-message { align-self: flex-end; }
+        .agent-message { align-self: flex-start; }
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            word-break: break-word;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }
+        .user-message .message-bubble {
+            background: #1e3d3a;
+            color: #fff;
+            border-bottom-right-radius: 6px;
+        }
+        .agent-message .message-bubble {
+            background: #fff;
+            color: #2c3e2f;
+            border: 1px solid rgba(0,0,0,0.06);
+            border-bottom-left-radius: 6px;
+        }
+        .message-bubble img {
+            max-width: 100%;
+            border-radius: 12px;
+        }
+        .message-time {
+            font-size: 0.7rem;
+            color: #9a8c82;
+            margin-top: 4px;
+        }
+        .user-message .message-time { text-align: right; }
+        .input-area {
+            background: #fff;
+            border-top: 1px solid #eeeae5;
+            padding: 12px 16px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        #message-input {
+            flex: 1;
+            border: 1px solid #e5ddd5;
+            border-radius: 24px;
+            padding: 12px 18px;
+            font-size: 1rem;
+            background: #fefcf9;
+            outline: none;
+        }
+        #message-input:focus {
+            border-color: #b3a69a;
+            background: #fff;
+        }
+        #send-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: #1e3d3a;
+            color: #fff;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #send-btn:active:not(:disabled) { transform: scale(0.96); }
+        .photo-btn {
+            background: transparent;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 4px;
+        }
+        .error-bubble { background: #fef2f2 !important; color: #991b1b !important; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="lang-picker">
+            <select id="lang-select" title="Language">
+                <option value="zh" {% if lang == 'zh' %}selected{% endif %}>中文</option>
+                <option value="en" {% if lang == 'en' %}selected{% endif %}>English</option>
+                <option value="ja" {% if lang == 'ja' %}selected{% endif %}>日本語</option>
+                <option value="es" {% if lang == 'es' %}selected{% endif %}>Español</option>
+                <option value="fr" {% if lang == 'fr' %}selected{% endif %}>Français</option>
+            </select>
+        </div>
+        <h1 id="i18n-title">{{ i18n.title }}</h1>
+        <p id="i18n-subtitle">{{ i18n.subtitle }}</p>
+    </div>
+
+    <div id="chat-container" class="chat-container">
+        <div class="message agent-message">
+            <div class="message-bubble" id="welcome-bubble">{{ i18n.welcome }}</div>
+            <div class="message-time" id="welcome-time">{{ i18n.just_now }}</div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <button type="button" class="photo-btn" id="photo-btn" title="{{ i18n.upload_image }}">📷</button>
+        <input type="text" id="message-input" placeholder="{{ i18n.placeholder }}" autocomplete="off">
+        <button type="button" id="send-btn">↑</button>
+    </div>
+    <input type="file" id="file-input" accept="image/*" style="display: none">
+
+    <script>
+        const SUPPORTED_LANGS = {{ supported_langs | tojson }};
+        const SERVER_LANG = '{{ lang }}';
+        let currentLang = localStorage.getItem('foodie_twin_lang') || SERVER_LANG;
+        let i18n = {{ i18n | tojson }};
+
+
+        const localeMap = { zh: 'zh-CN', en: 'en-US', ja: 'ja-JP', es: 'es-ES', fr: 'fr-FR' };
+
+        function getLocale() { return localeMap[currentLang] || 'en-US'; }
+
+        async function loadTranslations(lang) {
+            try {
+                const res = await fetch('/api/i18n/' + lang);
+                if (res.ok) i18n = await res.json();
+            } catch (e) { console.warn('i18n load failed', e); }
+        }
+
+        function applyTranslations() {
+            document.title = i18n.meta_title || i18n.title;
+            const el = (id) => document.getElementById(id);
+            if (el('i18n-title')) el('i18n-title').textContent = i18n.title;
+            if (el('i18n-subtitle')) el('i18n-subtitle').textContent = i18n.subtitle;
+            if (el('welcome-bubble')) el('welcome-bubble').textContent = i18n.welcome;
+            if (el('welcome-time')) el('welcome-time').textContent = i18n.just_now;
+            if (el('message-input')) el('message-input').placeholder = i18n.placeholder;
+            if (el('photo-btn')) el('photo-btn').title = i18n.upload_image;
+        }
+
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const photoBtn = document.getElementById('photo-btn');
+        const fileInput = document.getElementById('file-input');
+        const langSelect = document.getElementById('lang-select');
+
+        function appendMessage(content, sender, isError) {
+            const div = document.createElement('div');
+            div.className = 'message ' + (sender === 'user' ? 'user-message' : 'agent-message');
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble' + (isError ? ' error-bubble' : '');
+            if (typeof content === 'string') bubble.textContent = content;
+            else bubble.appendChild(content);
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = new Date().toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' });
+            div.appendChild(bubble);
+            div.appendChild(time);
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendText(text) {
+            if (!text || !text.trim()) return;
+            appendMessage(text.trim(), 'user');
+            messageInput.value = '';
+            sendBtn.disabled = true;
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text.trim(), lang: currentLang })
+                });
+                const data = await res.json();
+                const reply = data.choices?.[0]?.message?.content ?? data.content ?? data.error ?? (currentLang === 'zh' ? '收到' : 'Got it');
+                appendMessage(reply, 'agent', !!data.error);
+            } catch (e) {
+                appendMessage((i18n.error_send || 'Send failed') + ': ' + e.message, 'agent', true);
+            }
+            sendBtn.disabled = false;
+        }
+
+        async function sendImage(file) {
+            const form = new FormData();
+            form.append('file', file);
+            form.append('lang', currentLang);
+            appendMessage('[' + (i18n.image_label || 'Image') + ']', 'user');
+            sendBtn.disabled = true;
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: form });
+                const data = await res.json();
+                const reply = data.choices?.[0]?.message?.content ?? data.content ?? data.error ?? (currentLang === 'zh' ? '图片已收到' : 'Image received');
+                appendMessage(reply, 'agent', !!data.error);
+            } catch (e) {
+                appendMessage((i18n.error_upload || 'Upload failed') + ': ' + e.message, 'agent', true);
+            }
+            sendBtn.disabled = false;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            langSelect.value = currentLang;
+            if (currentLang !== SERVER_LANG && SUPPORTED_LANGS.includes(currentLang)) {
+                fetch('/api/i18n/' + currentLang).then(r => r.ok ? r.json() : {}).then(t => {
+                    if (t && t.title) { i18n = t; applyTranslations(); }
+                }).catch(() => {});
+            }
+        });
+
+        langSelect.addEventListener('change', async function () {
+            currentLang = langSelect.value;
+            localStorage.setItem('foodie_twin_lang', currentLang);
+            await loadTranslations(currentLang);
+            applyTranslations();
+        });
+
+        sendBtn.addEventListener('click', function () {
+            sendText(messageInput.value);
+        });
+        messageInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendText(messageInput.value);
+            }
+        });
+        photoBtn.addEventListener('click', function () {
+            fileInput.click();
+        });
+        fileInput.addEventListener('change', function () {
+            const file = fileInput.files && fileInput.files[0];
+            if (file) sendImage(file);
+            fileInput.value = '';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "meta_title": "我的美食品味分身",
+  "title": "我的美食品味分身",
+  "subtitle": "发外卖截图 / 定位 / 照片，自动记入品味档案",
+  "welcome": "你好，我是你的美食品味分身。发文字、外卖截图、位置或菜品照片，我会自动识别并记入你的品味档案。",
+  "placeholder": "说句话，或发截图/位置…",
+  "upload_image": "上传图片",
+  "send": "发送",
+  "error_send": "发送失败",
+  "error_upload": "上传失败",
+  "just_now": "刚刚",
+  "image_label": "图片",
+  "lang_name": "中文"
+}

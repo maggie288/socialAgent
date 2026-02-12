@@ -1,0 +1,14 @@
+{
+  "meta_title": "Mon Jumeau de Goût Culinaire",
+  "title": "Mon Jumeau de Goût Culinaire",
+  "subtitle": "Partagez captures de commande, lieu ou photos — enregistrés dans votre profil de goût.",
+  "welcome": "Bonjour, je suis votre jumeau de goût culinaire. Envoyez du texte, des captures de commande, un lieu ou des photos de plats, je les reconnaîtrai et les ajouterai à votre profil.",
+  "placeholder": "Écrivez un message ou partagez une capture / un lieu…",
+  "upload_image": "Télécharger une image",
+  "send": "Envoyer",
+  "error_send": "Échec de l'envoi",
+  "error_upload": "Échec du téléchargement",
+  "just_now": "À l'instant",
+  "image_label": "Image",
+  "lang_name": "Français"
+}

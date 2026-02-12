@@ -1,0 +1,12 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+node_modules/
+memory/moltbook_token.txt
+memory/moltbook_state.json
+memory/taste_profile.md
+memory/food_photos/
+*.log
+.DS_Store

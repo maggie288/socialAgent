@@ -1,0 +1,14 @@
+{
+  "meta_title": "My Food Taste Twin",
+  "title": "My Food Taste Twin",
+  "subtitle": "Share delivery screenshots, location, or photos — auto-saved to your taste profile.",
+  "welcome": "Hi, I'm your food taste twin. Send text, delivery screenshots, location, or dish photos and I'll recognize and add them to your taste profile.",
+  "placeholder": "Type a message, or share a screenshot / location…",
+  "upload_image": "Upload image",
+  "send": "Send",
+  "error_send": "Send failed",
+  "error_upload": "Upload failed",
+  "just_now": "Just now",
+  "image_label": "Image",
+  "lang_name": "English"
+}
