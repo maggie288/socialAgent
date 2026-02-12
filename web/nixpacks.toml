@@ -1,0 +1,3 @@
+# Railway 使用 Nixpacks 时用此启动命令，避免 $PORT 未展开
+[start]
+cmd = "sh run.sh"

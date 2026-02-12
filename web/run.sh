@@ -1,4 +1,4 @@
 #!/bin/sh
-# Railway 等平台会注入 PORT，用 sh 执行以正确展开变量
-PORT=${PORT:-5000}
-exec gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 app:app
+# Railway 等平台会注入 PORT，在此读取避免 CMD 中 $PORT 字面量
+port="${PORT:-5000}"
+exec gunicorn --bind "0.0.0.0:${port}" --workers 2 --threads 2 --access-logfile - --error-logfile - app:app

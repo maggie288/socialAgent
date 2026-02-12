@@ -17,4 +17,5 @@ USER appuser
 EXPOSE 5000
 
 ENV PORT=5000 FLASK_ENV=production
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --threads 2 --access-logfile - --error-logfile - app:app"]
+# 用脚本读取 PORT，避免 CMD 中 $PORT 在容器内未展开
+CMD ["sh", "run.sh"]
