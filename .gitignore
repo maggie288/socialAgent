@@ -10,3 +10,5 @@ memory/taste_profile.md
 memory/food_photos/
 *.log
 .DS_Store
+web/data/
+web/static/uploads/

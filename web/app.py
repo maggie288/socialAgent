@@ -1,14 +1,19 @@
 """
 Web 投喂入口：将主理人消息（文字/图片）转发到 OpenClaw。
-支持多语言（i18n），配置通过环境变量。生产环境请用 Gunicorn 运行。
+支持注册/登录，会话鉴权，以及 Feed / 分享上传页面拆分。
 """
 import os
 import json
 import logging
+from datetime import datetime
+from functools import wraps
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template
+
 import requests
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 # 优先当前目录，再尝试项目根目录 .env
 load_dotenv()
@@ -16,6 +21,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 app = Flask(__name__)
 app.config["JSON_AS_ASCII"] = False
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
 _is_production = os.environ.get("FLASK_ENV") == "production"
 if _is_production:
@@ -32,8 +38,88 @@ OPENCLAW_CHAT = _openclaw_url if "/v1/chat/completions" in _openclaw_url else f"
 OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "")
 
 TRANSLATIONS_DIR = Path(__file__).resolve().parent / "translations"
+DATA_DIR = Path(__file__).resolve().parent / "data"
+USERS_FILE = DATA_DIR / "users.json"
+SHARES_FILE = DATA_DIR / "shares.json"
+UPLOAD_DIR = Path(__file__).resolve().parent / "static" / "uploads"
 SUPPORTED_LANGS = ("zh", "en", "ja", "es", "fr")
 DEFAULT_LANG = "zh"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+DEFAULT_RECOMMENDATIONS = [
+    {
+        "title": "今日轻盈沙拉碗",
+        "desc": "牛油果 + 鹰嘴豆 + 烤南瓜，适合午餐补能量。",
+        "tag": "低负担",
+    },
+    {
+        "title": "一锅番茄海鲜炖饭",
+        "desc": "30 分钟完成，海鲜鲜味和番茄酸甜很平衡。",
+        "tag": "快手",
+    },
+    {
+        "title": "豆乳抹茶布丁",
+        "desc": "少糖甜品，口感细腻，适合晚餐后小确幸。",
+        "tag": "甜品",
+    },
+]
+
+
+def _load_json(path, default):
+    if not path.exists():
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def _save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _load_users():
+    users = _load_json(USERS_FILE, [])
+    return {u.get("username", ""): u for u in users if u.get("username")}
+
+
+def _save_users(users_map):
+    _save_json(USERS_FILE, list(users_map.values()))
+
+
+def _load_shares():
+    shares = _load_json(SHARES_FILE, [])
+    if not isinstance(shares, list):
+        return []
+    return shares
+
+
+def _save_shares(shares):
+    _save_json(SHARES_FILE, shares)
+
+
+def _current_user():
+    return session.get("username")
+
+
+def _is_api_request():
+    return request.path.startswith("/api/")
+
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if _current_user():
+            return view_func(*args, **kwargs)
+        if _is_api_request():
+            return jsonify({"error": "login required"}), 401
+        return redirect(url_for("login", next=request.path))
+
+    return wrapped
 
 
 def _load_translations(lang):
@@ -59,10 +145,94 @@ def get_locale():
 
 @app.route("/")
 def index():
-    """渲染投喂页面，支持 ?lang= 与 Accept-Language"""
-    lang = get_locale()
-    i18n = _load_translations(lang)
-    return render_template("chat.html", lang=lang, i18n=i18n, supported_langs=SUPPORTED_LANGS)
+    if _current_user():
+        return redirect(url_for("feed"))
+    return redirect(url_for("login"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if _current_user():
+        return redirect(url_for("feed"))
+
+    error = ""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        confirm_password = request.form.get("confirm_password") or ""
+
+        if not username or not password:
+            error = "用户名和密码不能为空。"
+        elif len(username) < 3:
+            error = "用户名至少 3 个字符。"
+        elif len(password) < 6:
+            error = "密码至少 6 位。"
+        elif password != confirm_password:
+            error = "两次输入密码不一致。"
+        else:
+            users_map = _load_users()
+            if username in users_map:
+                error = "该用户名已存在。"
+            else:
+                users_map[username] = {
+                    "username": username,
+                    "password_hash": generate_password_hash(password),
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+                _save_users(users_map)
+                session["username"] = username
+                return redirect(url_for("feed"))
+
+    return render_template("register.html", error=error)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if _current_user():
+        return redirect(url_for("feed"))
+
+    error = ""
+    next_url = request.args.get("next") or url_for("feed")
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        users_map = _load_users()
+        user = users_map.get(username)
+
+        if not user or not check_password_hash(user.get("password_hash", ""), password):
+            error = "用户名或密码错误。"
+        else:
+            session["username"] = username
+            if next_url.startswith("/"):
+                return redirect(next_url)
+            return redirect(url_for("feed"))
+
+    return render_template("login.html", error=error, next_url=next_url)
+
+
+@app.route("/logout", methods=["POST"])
+@login_required
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+@app.route("/feed")
+@login_required
+def feed():
+    shares = _load_shares()
+    return render_template(
+        "feed.html",
+        username=_current_user(),
+        recommendations=DEFAULT_RECOMMENDATIONS,
+        shares=list(reversed(shares)),
+    )
+
+
+@app.route("/share")
+@login_required
+def share_page():
+    return render_template("share.html", username=_current_user())
 
 
 @app.route("/api/i18n/<lang>")
@@ -74,6 +244,7 @@ def i18n(lang):
 
 
 @app.route("/api/chat", methods=["POST"])
+@login_required
 def chat():
     """接收前端消息，转发给 OpenClaw；请求体可带 lang，使分身用该语言回复"""
     data = request.get_json() or {}
@@ -122,6 +293,7 @@ def _lang_reply_hint(lang):
 
 
 @app.route("/api/upload", methods=["POST"])
+@login_required
 def upload():
     """接收图片/文件，转发给 OpenClaw（多模态投喂）。
     具体 multipart 格式需与 OpenClaw 文档对齐，此处为占位实现。
@@ -154,6 +326,43 @@ def upload():
     except requests.RequestException as e:
         logger.warning("upload upstream error: %s", e)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/feed")
+@login_required
+def feed_api():
+    shares = list(reversed(_load_shares()))
+    return jsonify({"recommendations": DEFAULT_RECOMMENDATIONS, "shares": shares})
+
+
+@app.route("/api/share", methods=["POST"])
+@login_required
+def share():
+    text = (request.form.get("text") or "").strip()
+    file = request.files.get("image")
+    if not text and not file:
+        return jsonify({"error": "text or image required"}), 400
+
+    image_url = ""
+    if file and file.filename:
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        filename = secure_filename(file.filename)
+        saved_name = f"{timestamp}_{_current_user()}_{filename}"
+        destination = UPLOAD_DIR / saved_name
+        file.save(destination)
+        image_url = f"/static/uploads/{saved_name}"
+
+    shares = _load_shares()
+    share_item = {
+        "username": _current_user(),
+        "text": text,
+        "image_url": image_url,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    shares.append(share_item)
+    shares = shares[-200:]
+    _save_shares(shares)
+    return jsonify({"ok": True, "share": share_item})
 
 
 @app.after_request
